@@ -28,7 +28,7 @@ end
 
 -- 3. Skapa fönster
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Ultimate Edition',
+    Title = 'Menduware - Ultimate Edition v2',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -61,8 +61,8 @@ local SkinColorGroup = Tabs.Skins:AddRightGroupbox('Färg & Finish Anpassning')
 
 local MovementGroup = Tabs.Movement:AddLeftGroupbox('Movement Mods (Speed & Noclip)')
 local FlyGroup = Tabs.Movement:AddRightGroupbox('Fly Inställningar')
-local OrbitTeleportGroup = Tabs.Movement:AddRightGroupbox('Orbit Inställningar')
-local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Avancerad Voidspam')
+local OrbitTeleportGroup = Tabs.Movement:AddRightGroupbox('Hyper-Advanced Orbit')
+local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Ultimate Voidspam & Chaos')
 local MiscGroup = Tabs.Misc:AddLeftGroupbox('Hitsounds & Hit Messages')
 
 ---------------------------------------------------------
@@ -125,7 +125,6 @@ local function applySkinChanger()
     local char = LocalPlayer.Character
     if not char then return end
 
-    -- Kolla både i karaktären och i spelarens ryggsäck (Backpack) efter vapen/verktyg
     local containers = {char, LocalPlayer:FindFirstChild("Backpack")}
     local materialChoice = Options.SkinMaterialDropdown.Value
     local chosenColor = Options.SkinColorPicker.Value
@@ -139,7 +138,6 @@ local function applySkinChanger()
                 if item:IsA("Tool") then
                     for _, part in ipairs(item:GetDescendants()) do
                         if part:IsA("BasePart") then
-                            -- Sätt material
                             if materialChoice == 'Neon' then
                                 part.Material = Enum.Material.Neon
                             elseif materialChoice == 'Glass' then
@@ -156,11 +154,9 @@ local function applySkinChanger()
                                 part.Material = Enum.Material.CorrodedMetal
                             end
 
-                            -- Sätt färg och glans
                             part.Color = chosenColor
                             part.Reflectance = chosenReflectance
 
-                            -- Hantera textur / mönster om aktiverat
                             if useTexture and textureId ~= "" then
                                 local existingDecal = part:FindFirstChild("MenduwareSkinDecal")
                                 if not existingDecal then
@@ -250,7 +246,7 @@ local function getClosestTargetPlayer()
 end
 
 ---------------------------------------------------------
--- ANTIKATANA & MELEE LOGIK
+-- ANTIKATANA LOGIK
 ---------------------------------------------------------
 local function antiKatanaStep()
     if not (Toggles.AntiKatanaToggle and Toggles.AntiKatanaToggle.Value) then return end
@@ -281,7 +277,7 @@ local function antiKatanaStep()
 end
 
 ---------------------------------------------------------
--- ORBIT & VOIDSPAM LOGIK
+-- ULTRA ORBIT & HYPER VOIDSPAM LOGIK
 ---------------------------------------------------------
 local function getPlayerList()
     local list = {}
@@ -298,6 +294,7 @@ end
 
 local orbitAngle = 0
 local voidTickAccumulator = 0
+local spiralTimer = 0
 
 local function orbitTargetStep(deltaTime)
     if not (Toggles.OrbitToggle and Toggles.OrbitToggle.Value) then return end
@@ -318,14 +315,52 @@ local function orbitTargetStep(deltaTime)
 
             local targetPos = targetRoot.Position
             local angleRad = math.rad(orbitAngle)
-            local radius = Options.OrbitTpRadius.Value
-            local height = Options.OrbitTpHeight.Value
+            local baseRadius = Options.OrbitTpRadius.Value
+            local baseHeight = Options.OrbitTpHeight.Value
+            local mode = Options.OrbitMode.Value
 
-            local offsetX = math.cos(angleRad) * radius
-            local offsetZ = math.sin(angleRad) * radius
-            local finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + height, targetPos.Z + offsetZ)
+            local finalPos = Vector3.zero
+            local lookTarget = targetPos
 
-            rootPart.CFrame = CFrame.new(finalPos, targetPos)
+            if mode == 'Standard Cirkel' then
+                local offsetX = math.cos(angleRad) * baseRadius
+                local offsetZ = math.sin(angleRad) * baseRadius
+                finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + baseHeight, targetPos.Z + offsetZ)
+
+            elseif mode == 'Elliptisk (Oval)' then
+                local stretchX = Options.OrbitEllipticX.Value
+                local stretchZ = Options.OrbitEllipticZ.Value
+                local offsetX = math.cos(angleRad) * (baseRadius * stretchX)
+                local offsetZ = math.sin(angleRad) * (baseRadius * stretchZ)
+                finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + baseHeight, targetPos.Z + offsetZ)
+
+            elseif mode == 'Vertikal / Vågrät Looping' then
+                spiralTimer = spiralTimer + deltaTime * (speed / 30)
+                local vHeight = math.sin(spiralTimer) * (baseHeight + 10)
+                local offsetX = math.cos(angleRad) * baseRadius
+                local offsetZ = math.sin(angleRad) * baseRadius
+                finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + vHeight, targetPos.Z + offsetZ)
+
+            elseif mode == 'Helix / Spiral Uppåt' then
+                spiralTimer = (spiralTimer + deltaTime * 2) % 15
+                local currentH = baseHeight + (spiralTimer * 3) - 7
+                local offsetX = math.cos(angleRad) * baseRadius
+                local offsetZ = math.sin(angleRad) * baseRadius
+                finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + currentH, targetPos.Z + offsetZ)
+
+            elseif mode == 'Kaotisk / Oförutsägbar' then
+                local randOffset = Vector3.new(math.random(-5, 5), math.random(-2, 5), math.random(-5, 5))
+                local offsetX = math.cos(angleRad) * baseRadius
+                local offsetZ = math.sin(angleRad) * baseRadius
+                finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + baseHeight, targetPos.Z + offsetZ) + randOffset
+            end
+
+            -- Anpassa blickfång beroende på inställning
+            if Toggles.OrbitLookAtTarget and Toggles.OrbitLookAtTarget.Value then
+                rootPart.CFrame = CFrame.new(finalPos, targetPos)
+            else
+                rootPart.CFrame = CFrame.new(finalPos) * rootPart.CFrame.Rotation
+            end
         end
     end
 end
@@ -337,25 +372,24 @@ local function voidSpamStep(deltaTime)
     local rootPart = char:FindFirstChild("HumanoidRootPart")
     if not rootPart then return end
 
-    local speedVal = Options.VoidSpamSpeed and Options.VoidSpamSpeed.Value or 20
+    local speedVal = Options.VoidSpamSpeed and Options.VoidSpamSpeed.Value or 35
     voidTickAccumulator = voidTickAccumulator + deltaTime
     if voidTickAccumulator < (1 / speedVal) then return end
     voidTickAccumulator = 0
 
-    local mode = Options.VoidSpamMode and Options.VoidSpamMode.Value or 'Random'
-    local xRange = Options.VoidSpamX and Options.VoidSpamX.Value or 15
-    local yRange = Options.VoidSpamY and Options.VoidSpamY.Value or 15
-    local zRange = Options.VoidSpamZ and Options.VoidSpamZ.Value or 15
-
+    local mode = Options.VoidSpamMode and Options.VoidSpamMode.Value or 'Full 3D Chaos (Explosiv)'
+    local xRange = Options.VoidSpamX and Options.VoidSpamX.Value or 20
+    local yRange = Options.VoidSpamY and Options.VoidSpamY.Value or 20
+    local zRange = Options.VoidSpamZ and Options.VoidSpamZ.Value or 20
     local offset = Vector3.zero
 
-    if mode == 'Random' then
+    if mode == 'Full 3D Chaos (Explosiv)' then
         offset = Vector3.new(
             math.random(-xRange, xRange),
             math.random(-yRange, yRange),
             math.random(-zRange, zRange)
         )
-    elseif mode == 'Cirkel / Spherical' then
+    elseif mode == 'Sfärisk / Kulan' then
         local phi = math.random() * math.pi * 2
         local costheta = math.random() * 2 - 1
         local theta = math.acos(costheta)
@@ -365,17 +399,32 @@ local function voidSpamStep(deltaTime)
             r * math.sin(theta) * math.sin(phi),
             r * math.cos(theta)
         )
-    elseif mode == 'Endast Höjd (Y-Axis Shake)' then
+    elseif mode == 'Endast Höjd (Y-Axis Glitch)' then
         offset = Vector3.new(0, math.random(-yRange, yRange), 0)
-    elseif mode == 'Darrning (Micro-Jitter)' then
+    elseif mode == 'Horisontell Hyper-Jitter' then
+        offset = Vector3.new(math.random(-xRange, xRange), 0, math.random(-zRange, zRange))
+    elseif mode == 'Mikro-Darrning (Stealth Shake)' then
         offset = Vector3.new(
-            math.random(-3, 3),
-            math.random(-3, 3),
-            math.random(-3, 3)
+            math.random(-4, 4),
+            math.random(-2, 2),
+            math.random(-4, 4)
         )
+    elseif mode == 'Cylindrisk Pisk-snurr' then
+        local angle = math.random() * math.pi * 2
+        local r = math.random() * xRange
+        offset = Vector3.new(math.cos(angle) * r, math.random(-yRange, yRange), math.sin(angle) * r)
     end
 
-    rootPart.CFrame = rootPart.CFrame + offset
+    -- Om "Lås Centrumposition" är på, studsa ut och in från startpunkten, annars flyttas man iväg permanent
+    if Toggles.VoidSpamAnchor and Toggles.VoidSpamAnchor.Value then
+        if not _G.VoidOriginalPos then
+            _G.VoidOriginalPos = rootPart.Position
+        end
+        rootPart.CFrame = CFrame.new(_G.VoidOriginalPos + offset)
+    else
+        _G.VoidOriginalPos = nil
+        rootPart.CFrame = rootPart.CFrame + offset
+    end
 end
 
 ---------------------------------------------------------
@@ -639,21 +688,28 @@ MovementGroup:AddSlider('WalkSpeedValue', { Text = 'Springhastighet (Speed)', De
 FlyGroup:AddToggle('FlyToggle', { Text = 'Aktivera Fly', Default = false })
 FlyGroup:AddSlider('FlySpeed', { Text = 'Flyghastighet', Default = 50, Min = 10, Max = 200, Rounding = 0 })
 
-OrbitTeleportGroup:AddToggle('OrbitToggle', { Text = 'Aktivera Orbit Runt Spelare', Default = false })
+-- HYPER-ADVANCED ORBIT SEKTION
+OrbitTeleportGroup:AddToggle('OrbitToggle', { Text = 'Aktivera Hyper-Orbit', Default = false })
 OrbitTeleportGroup:AddDropdown('OrbitTpPlayerDropdown', { Values = getPlayerList(), Default = 1, Multi = false, Text = 'Välj Målspelare' })
-OrbitTeleportGroup:AddSlider('OrbitTpRadius', { Text = 'Orbit Avstånd', Default = 10, Min = 2, Max = 50, Rounding = 0 })
-OrbitTeleportGroup:AddSlider('OrbitTpHeight', { Text = 'Orbit Höjd (Offset)', Default = 0, Min = -10, Max = 20, Rounding = 0 })
-OrbitTeleportGroup:AddSlider('OrbitSpeed', { Text = 'Orbit Hastighet', Default = 90, Min = 10, Max = 300, Rounding = 0 })
+OrbitTeleportGroup:AddDropdown('OrbitMode', { Values = { 'Standard Cirkel', 'Elliptisk (Oval)', 'Vertikal / Vågrät Looping', 'Helix / Spiral Uppåt', 'Kaotisk / Oförutsägbar' }, Default = 1, Multi = false, Text = 'Orbit Mönster' })
+OrbitTeleportGroup:AddToggle('OrbitLookAtTarget', { Text = 'Fixera Kamera/Blick mot Målet', Default = true })
+OrbitTeleportGroup:AddSlider('OrbitTpRadius', { Text = 'Orbit Radie / Avstånd', Default = 10, Min = 1, Max = 100, Rounding = 0 })
+OrbitTeleportGroup:AddSlider('OrbitEllipticX', { Text = 'Ellips X-Sträckning (Bredd)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
+OrbitTeleportGroup:AddSlider('OrbitEllipticZ', { Text = 'Ellips Z-Sträckning (Djup)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
+OrbitTeleportGroup:AddSlider('OrbitTpHeight', { Text = 'Orbit Höjd (Offset)', Default = 0, Min = -30, Max = 50, Rounding = 0 })
+OrbitTeleportGroup:AddSlider('OrbitSpeed', { Text = 'Orbit Hastighet (Varv/s)', Default = 90, Min = 10, Max = 500, Rounding = 0 })
 OrbitTeleportGroup:AddButton('Uppdatera spelarlista', function()
     Options.OrbitTpPlayerDropdown:SetValues(getPlayerList())
 end)
 
-VoidSpamGroup:AddToggle('VoidSpamToggle', { Text = 'Aktivera Anpassad Voidspam', Default = false })
-VoidSpamGroup:AddDropdown('VoidSpamMode', { Values = { 'Random', 'Cirkel / Spherical', 'Endast Höjd (Y-Axis Shake)', 'Darrning (Micro-Jitter)' }, Default = 1, Multi = false, Text = 'Voidspam Mönster' })
-VoidSpamGroup:AddSlider('VoidSpamSpeed', { Text = 'Spam-Frekvens (Tills/Sek)', Default = 20, Min = 5, Max = 60, Rounding = 0 })
-VoidSpamGroup:AddSlider('VoidSpamX', { Text = 'X-Axel Spridning', Default = 15, Min = 1, Max = 50, Rounding = 0 })
-VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 15, Min = 1, Max = 50, Rounding = 0 })
-VoidSpamGroup:AddSlider('VoidSpamZ', { Text = 'Z-Axel Spridning', Default = 15, Min = 1, Max = 50, Rounding = 0 })
+-- ULTIMATE VOIDSPAM & CHAOS SEKTION
+VoidSpamGroup:AddToggle('VoidSpamToggle', { Text = 'Aktivera Ultimate Voidspam', Default = false })
+VoidSpamGroup:AddToggle('VoidSpamAnchor', { Text = 'Lås Centrumposition (Boosta på plats)', Default = false })
+VoidSpamGroup:AddDropdown('VoidSpamMode', { Values = { 'Full 3D Chaos (Explosiv)', 'Sfärisk / Kulan', 'Endast Höjd (Y-Axis Glitch)', 'Horisontell Hyper-Jitter', 'Mikro-Darrning (Stealth Shake)', 'Cylindrisk Pisk-snurr' }, Default = 1, Multi = false, Text = 'Voidspam / Chaos Läge' })
+VoidSpamGroup:AddSlider('VoidSpamSpeed', { Text = 'Spam-Frekvens (Tills/Sek)', Default = 35, Min = 5, Max = 120, Rounding = 0 })
+VoidSpamGroup:AddSlider('VoidSpamX', { Text = 'X-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
+VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
+VoidSpamGroup:AddSlider('VoidSpamZ', { Text = 'Z-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
 
 MiscGroup:AddToggle('HitSoundToggle', { Text = 'Aktivera Hit Sound', Default = true })
 MiscGroup:AddDropdown('HitSoundDropdown', { Values = { 'Rust', 'Neverlose', 'Bell', 'Pop', 'OSU' }, Default = 1, Multi = false, Text = 'Välj Hit Sound' })
