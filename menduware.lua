@@ -10,8 +10,68 @@ local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
+local Camera = Workspace.CurrentCamera
+
+---------------------------------------------------------
+-- RIVALS BYPASS - Made by West (Inlagd vid start)
+---------------------------------------------------------
+pcall(function()
+    local a, b, c = Players, ReplicatedStorage, CoreGui
+    local d = a.LocalPlayer
+    local e = {"Kick", "Ban", "AC", "AntiCheat", "Memer", "Report", "Flag"}
+    
+    for _, f in pairs(b:GetDescendants()) do
+        if f:IsA("RemoteEvent") then
+            for _, g in pairs(e) do
+                if f.Name:find(g) then
+                    pcall(function() f.FireServer = function() return end end)
+                    print("Blocked: " .. f.Name)
+                    break
+                end
+            end
+        elseif f:IsA("RemoteFunction") then
+            for _, g in pairs(e) do
+                if f.Name:find(g) then
+                    pcall(function() f.InvokeServer = function() return end end)
+                    print("Blocked: " .. f.Name)
+                    break
+                end
+            end
+        end
+    end
+
+    if c then
+        for _, f in pairs(c:GetDescendants()) do
+            if f.Name and f.Name:lower():find("anticheat") then
+                pcall(function() f:Destroy() end)
+                print("Removed: " .. f.Name)
+            end
+        end
+    end
+
+    pcall(function() game.Kick = function() return end end)
+    pcall(function() if d then d.Kick = function() return end end end)
+    pcall(function()
+        d.CharacterAdded:Connect(function()
+            task.wait(0.5)
+            for _, f in pairs(b:GetDescendants()) do
+                if f:IsA("RemoteEvent") then
+                    for _, g in pairs(e) do
+                        if f.Name:find(g) then
+                            pcall(function() f.FireServer = function() return end end)
+                            break
+                        end
+                    end
+                end
+            end
+            print("Bypass reapplied")
+        end)
+    end)
+    print("Bypass loaded - Made by West")
+end)
 
 -- 2. Ladda LinoriaLib asynkront
 local Library, ThemeManager, SaveManager
@@ -28,7 +88,7 @@ end
 
 -- 3. Skapa fönster
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Ultimate Edition v2',
+    Title = 'Menduware - Ultimate Edition v4 (Rivals Bypass)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -52,6 +112,7 @@ local Tabs = {
 }
 
 local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot / Enhanced Aimbot')
+local SilentAimGroup = Tabs.Combat:AddLeftGroupbox('Silent Aim & FOV')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
 local CombatMiscGroup = Tabs.Combat:AddRightGroupbox('Antikatana & Melee Mods')
 local VisualsGroup = Tabs.Visuals:AddLeftGroupbox('Player ESP Settings')
@@ -64,6 +125,188 @@ local FlyGroup = Tabs.Movement:AddRightGroupbox('Fly Inställningar')
 local OrbitTeleportGroup = Tabs.Movement:AddRightGroupbox('Hyper-Advanced Orbit')
 local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Ultimate Voidspam & Chaos')
 local MiscGroup = Tabs.Misc:AddLeftGroupbox('Hitsounds & Hit Messages')
+
+---------------------------------------------------------
+-- SILENT AIM & FOV LOGIK (HOOKED UTILITY)
+---------------------------------------------------------
+local utilityFound, Utility = pcall(function()
+    return require(ReplicatedStorage:WaitForChild("Modules", 2):WaitForChild("Utility", 2))
+end)
+
+local OriginalRaycast = utilityFound and Utility and Utility.Raycast or nil
+
+local SilentSettings = {
+    Enabled = false,
+    HitChance = 100,
+    HitPart = "Head",
+    WallCheck = true,
+    FOVCircleEnabled = true,
+    FOVRadius = 150,
+    FOVColor = Color3.fromRGB(255, 255, 255),
+    FOVTransparency = 0.7,
+    FOVThickness = 1,
+}
+
+-- Skapa FOV-cirkel på skärmen
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = false
+fovCircle.Radius = SilentSettings.FOVRadius
+fovCircle.Color = SilentSettings.FOVColor
+fovCircle.Transparency = SilentSettings.FOVTransparency
+fovCircle.Thickness = SilentSettings.FOVThickness
+fovCircle.Filled = false
+fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+RunService.RenderStepped:Connect(function()
+    local isSilentActive = SilentSettings.Enabled and (Toggles.SilentAimToggle and Toggles.SilentAimToggle.Value)
+    fovCircle.Visible = isSilentActive and SilentSettings.FOVCircleEnabled
+    fovCircle.Radius = SilentSettings.FOVRadius
+    fovCircle.Color = SilentSettings.FOVColor
+    fovCircle.Transparency = SilentSettings.FOVTransparency
+    fovCircle.Thickness = SilentSettings.FOVThickness
+    fovCircle.Position = UserInputService:GetMouseLocation()
+end)
+
+local function getSilentTargetPart(player)
+    local character = player.Character
+    if not character then return nil end
+    local part = character:FindFirstChild(SilentSettings.HitPart)
+    if not part then
+        part = character:FindFirstChild("Head")
+    end
+    return part
+end
+
+local function isPlayerAlive(player)
+    local character = player.Character
+    if not character then return false end
+    local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+    if not humanoid then return false end
+    return humanoid.Health > 0
+end
+
+local function isVisibleForSilent(origin, targetPart, originalIgnore)
+    if not SilentSettings.WallCheck then
+        return true
+    end
+    local direction = targetPart.Position - origin
+    local distance = direction.Magnitude
+    if distance <= 0 then return false end
+
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    local ignoreList = {}
+
+    local localChar = LocalPlayer.Character
+    if localChar then
+        table.insert(ignoreList, localChar)
+    end
+
+    local targetChar = targetPart.Parent
+    if targetChar then
+        table.insert(ignoreList, targetChar)
+    end
+
+    if originalIgnore then
+        if type(originalIgnore) == "table" then
+            for _, v in ipairs(originalIgnore) do
+                table.insert(ignoreList, v)
+            end
+        else
+            table.insert(ignoreList, originalIgnore)
+        end
+    end
+
+    raycastParams.FilterDescendantsInstances = ignoreList
+
+    local result = Workspace:Raycast(origin, direction, raycastParams)
+    if not result then
+        return true
+    end
+
+    local hitInstance = result.Instance
+    if hitInstance == targetPart or (targetChar and hitInstance:IsDescendantOf(targetChar)) then
+        return true
+    end
+
+    return false
+end
+
+local function getNearestLivingPlayerInFOV()
+    local character = LocalPlayer.Character
+    if not character then return nil end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil end
+    
+    local mousePos = UserInputService:GetMouseLocation()
+    local closest = nil
+    local shortestDist = math.huge
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isPlayerAlive(player) then
+            local targetPart = getSilentTargetPart(player)
+            if targetPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    local screenVector = Vector2.new(screenPos.X, screenPos.Y)
+                    local distToMouse = (screenVector - mousePos).Magnitude
+
+                    if distToMouse <= SilentSettings.FOVRadius then
+                        if distToMouse < shortestDist then
+                            shortestDist = distToMouse
+                            closest = player
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+if Utility and OriginalRaycast then
+    Utility.Raycast = function(self, from, to, range, ignore, mode, debug)
+        local isSilentActive = SilentSettings.Enabled and (Toggles.SilentAimToggle and Toggles.SilentAimToggle.Value)
+        if not isSilentActive then
+            return OriginalRaycast(self, from, to, range, ignore, mode, debug)
+        end
+
+        if math.random(1, 100) > SilentSettings.HitChance then
+            return OriginalRaycast(self, from, to, range, ignore, mode, debug)
+        end
+
+        local target = getNearestLivingPlayerInFOV()
+        if not target then
+            return OriginalRaycast(self, from, to, range, ignore, mode, debug)
+        end
+
+        local hitPart = getSilentTargetPart(target)
+        if not hitPart then
+            return OriginalRaycast(self, from, to, range, ignore, mode, debug)
+        end
+
+        if not isVisibleForSilent(from, hitPart, ignore) then
+            return OriginalRaycast(self, from, to, range, ignore, mode, debug)
+        end
+
+        local hitPosition = hitPart.Position
+        local direction = (hitPosition - from).Unit
+        local distance = (hitPosition - from).Magnitude
+
+        if distance > range then
+            distance = range
+            hitPosition = from + direction * range
+        end
+
+        return {
+            Position = hitPosition,
+            Distance = distance,
+            Instance = hitPart,
+            Material = hitPart.Material,
+            Normal = -direction,
+        }
+    end
+end
 
 ---------------------------------------------------------
 -- LJUD & HIT MESSAGES LOGIK
@@ -320,7 +563,6 @@ local function orbitTargetStep(deltaTime)
             local mode = Options.OrbitMode.Value
 
             local finalPos = Vector3.zero
-            local lookTarget = targetPos
 
             if mode == 'Standard Cirkel' then
                 local offsetX = math.cos(angleRad) * baseRadius
@@ -355,7 +597,6 @@ local function orbitTargetStep(deltaTime)
                 finalPos = Vector3.new(targetPos.X + offsetX, targetPos.Y + baseHeight, targetPos.Z + offsetZ) + randOffset
             end
 
-            -- Anpassa blickfång beroende på inställning
             if Toggles.OrbitLookAtTarget and Toggles.OrbitLookAtTarget.Value then
                 rootPart.CFrame = CFrame.new(finalPos, targetPos)
             else
@@ -415,7 +656,6 @@ local function voidSpamStep(deltaTime)
         offset = Vector3.new(math.cos(angle) * r, math.random(-yRange, yRange), math.sin(angle) * r)
     end
 
-    -- Om "Lås Centrumposition" är på, studsa ut och in från startpunkten, annars flyttas man iväg permanent
     if Toggles.VoidSpamAnchor and Toggles.VoidSpamAnchor.Value then
         if not _G.VoidOriginalPos then
             _G.VoidOriginalPos = rootPart.Position
@@ -657,6 +897,14 @@ RagebotGroup:AddToggle('RagePrediction', { Text = 'Aktivera Hastighets-Prediktio
 RagebotGroup:AddDropdown('RageTarget', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Sikta På' })
 RagebotGroup:AddSlider('RageSmooth', { Text = 'Sikte Mjukhet (1 = Direkt Snap)', Default = 1, Min = 1, Max = 20, Rounding = 1 })
 
+SilentAimGroup:AddToggle('SilentAimToggle', { Text = 'Aktivera Silent Aim', Default = false, Callback = function(v) SilentSettings.Enabled = v end })
+SilentAimGroup:AddToggle('SilentWallCheck', { Text = 'Silent Wall Check', Default = true, Callback = function(v) SilentSettings.WallCheck = v end })
+SilentAimGroup:AddSlider('SilentHitChance', { Text = 'Hit Chance %', Default = 100, Min = 1, Max = 100, Rounding = 0, Callback = function(v) SilentSettings.HitChance = v end })
+SilentAimGroup:AddDropdown('SilentHitPart', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Silent Hit Part', Callback = function(v) SilentSettings.HitPart = v end })
+SilentAimGroup:AddToggle('FOVCircleEnabled', { Text = 'Visa FOV-cirkel', Default = true, Callback = function(v) SilentSettings.FOVCircleEnabled = v end })
+SilentAimGroup:AddSlider('FOVRadius', { Text = 'FOV Radie', Default = 150, Min = 20, Max = 600, Rounding = 0, Callback = function(v) SilentSettings.FOVRadius = v end })
+SilentAimGroup:AddLabel('FOV Cirkel Färg'):AddColorPicker('FOVColorPicker', { Default = Color3.fromRGB(255, 255, 255), Title = 'Välj FOV Färg', Callback = function(v) SilentSettings.FOVColor = v end })
+
 AntiAimGroup:AddToggle('AntiAimToggle', { Text = 'Aktivera Avancerad Anti-Aim', Default = false })
 AntiAimGroup:AddDropdown('AntiAimMode', { Values = { 'Spinbot', 'Jitter', 'Desync', 'Backward', 'Freestand' }, Default = 3, Multi = false, Text = 'Anti-Aim Läge' })
 AntiAimGroup:AddSlider('AntiAimSpeed', { Text = 'Snurr / Skak-Hastighet', Default = 50, Min = 10, Max = 150, Rounding = 0 })
@@ -688,7 +936,6 @@ MovementGroup:AddSlider('WalkSpeedValue', { Text = 'Springhastighet (Speed)', De
 FlyGroup:AddToggle('FlyToggle', { Text = 'Aktivera Fly', Default = false })
 FlyGroup:AddSlider('FlySpeed', { Text = 'Flyghastighet', Default = 50, Min = 10, Max = 200, Rounding = 0 })
 
--- HYPER-ADVANCED ORBIT SEKTION
 OrbitTeleportGroup:AddToggle('OrbitToggle', { Text = 'Aktivera Hyper-Orbit', Default = false })
 OrbitTeleportGroup:AddDropdown('OrbitTpPlayerDropdown', { Values = getPlayerList(), Default = 1, Multi = false, Text = 'Välj Målspelare' })
 OrbitTeleportGroup:AddDropdown('OrbitMode', { Values = { 'Standard Cirkel', 'Elliptisk (Oval)', 'Vertikal / Vågrät Looping', 'Helix / Spiral Uppåt', 'Kaotisk / Oförutsägbar' }, Default = 1, Multi = false, Text = 'Orbit Mönster' })
@@ -702,7 +949,6 @@ OrbitTeleportGroup:AddButton('Uppdatera spelarlista', function()
     Options.OrbitTpPlayerDropdown:SetValues(getPlayerList())
 end)
 
--- ULTIMATE VOIDSPAM & CHAOS SEKTION
 VoidSpamGroup:AddToggle('VoidSpamToggle', { Text = 'Aktivera Ultimate Voidspam', Default = false })
 VoidSpamGroup:AddToggle('VoidSpamAnchor', { Text = 'Lås Centrumposition (Boosta på plats)', Default = false })
 VoidSpamGroup:AddDropdown('VoidSpamMode', { Values = { 'Full 3D Chaos (Explosiv)', 'Sfärisk / Kulan', 'Endast Höjd (Y-Axis Glitch)', 'Horisontell Hyper-Jitter', 'Mikro-Darrning (Stealth Shake)', 'Cylindrisk Pisk-snurr' }, Default = 1, Multi = false, Text = 'Voidspam / Chaos Läge' })
