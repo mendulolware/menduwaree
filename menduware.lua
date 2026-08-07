@@ -401,7 +401,7 @@ local function applySkinChanger()
 end
 
 ---------------------------------------------------------
--- AVANCERAD RAGEBOT (MED ORBIT, VOIDSPAM & TELEPORT MODES)
+-- AVANCERAD RAGEBOT
 ---------------------------------------------------------
 local function getClosestPlayerForRage()
     local closestPlayer = nil
@@ -495,7 +495,7 @@ local function antiKatanaStep()
 end
 
 ---------------------------------------------------------
--- ORBIT & VOIDSPAM LOGIK (FRISTÅENDE)
+-- ORBIT & VOIDSPAM LOGIK
 ---------------------------------------------------------
 local function getPlayerList()
     local list = {}
@@ -615,7 +615,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 ---------------------------------------------------------
--- ADVANCED ESP SYSTEM
+-- ADVANCED ESP SYSTEM (UTAN GOTO)
 ---------------------------------------------------------
 local activeDrawings = {}
 
@@ -662,7 +662,7 @@ RunService.RenderStepped:Connect(function()
     local espEnabled = Toggles.ESPToggle and Toggles.ESPToggle.Value
 
     for player, drawings in pairs(activeDrawings) do
-        local shouldShow = false
+        local showESP = false
         local char = player.Character
         local rootPart = char and char:FindFirstChild("HumanoidRootPart")
         local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -682,6 +682,7 @@ RunService.RenderStepped:Connect(function()
                         local botValid, botValidCheck = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
 
                         if topValidCheck and botValidCheck then
+                            showESP = true
                             local height = math.abs(topValid.Y - botValid.Y)
                             local width = height / 2
                             local boxX = topValid.X - (width / 2)
@@ -747,25 +748,24 @@ RunService.RenderStepped:Connect(function()
                             else
                                 drawings.Tracer.Visible = false
                             end
-
-                            goto continueESP
                         end
                     end
                 end
             end
         end
 
-        drawings.BoxOutline.Visible = false
-        drawings.Box.Visible = false
-        drawings.BoxFilled.Visible = false
-        drawings.HealthBarOutline.Visible = false
-        drawings.HealthBar.Visible = false
-        drawings.NameText.Visible = false
-        drawings.InfoText.Visible = false
-        drawings.Tracer.Visible = false
-        drawings.HeadDot.Visible = false
-        for _, line in ipairs(drawings.Skeleton) do line.Visible = false end
-        ::continueESP::
+        if not showESP then
+            drawings.BoxOutline.Visible = false
+            drawings.Box.Visible = false
+            drawings.BoxFilled.Visible = false
+            drawings.HealthBarOutline.Visible = false
+            drawings.HealthBar.Visible = false
+            drawings.NameText.Visible = false
+            drawings.InfoText.Visible = false
+            drawings.Tracer.Visible = false
+            drawings.HeadDot.Visible = false
+            for _, line in ipairs(drawings.Skeleton) do line.Visible = false end
+        end
     end
 end)
 
