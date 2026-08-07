@@ -113,7 +113,6 @@ local Tabs = {
 }
 
 local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot / Enhanced Aimbot')
-local LegitAimGroup = Tabs.Combat:AddLeftGroupbox('Legit Aimbot (Keybind / Hotkey)')
 local SilentAimGroup = Tabs.Combat:AddRightGroupbox('Silent Aim & FOV')
 local WeaponModsGroup = Tabs.Combat:AddRightGroupbox('No Recoil & No Spread')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
@@ -328,7 +327,6 @@ if Utility and OriginalRaycast then
             return OriginalRaycast(self, from, to, range, ignore, mode, debug)
         end
 
-        -- Träffbekräftelse via Silent Aim! Spela ljud och skicka notis
         playHitSound()
         sendHitMessage(target.Name, 25)
 
@@ -481,57 +479,6 @@ local function getBestTarget()
     end
     return bestTargetPart
 end
-
----------------------------------------------------------
--- NY: LEGIT AIMBOT (KEYBIND / TARGET LOCK) LOGIK
----------------------------------------------------------
-local function getLegitTarget()
-    local mousePos = UserInputService:GetMouseLocation()
-    local closest = nil
-    local shortestDist = math.huge
-    local targetPartName = Options.LegitTargetPart and Options.LegitTargetPart.Value or "Head"
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and isPlayerAlive(player) then
-            local character = player.Character
-            local targetPart = character and character:FindFirstChild(targetPartName)
-            if targetPart then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-                if onScreen then
-                    local screenVector = Vector2.new(screenPos.X, screenPos.Y)
-                    local distToMouse = (screenVector - mousePos).Magnitude
-                    local maxDist = Options.LegitFOVRadius and Options.LegitFOVRadius.Value or 150
-
-                    if distToMouse <= maxDist then
-                        if distToMouse < shortestDist then
-                            shortestDist = distToMouse
-                            closest = targetPart
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return closest
-end
-
-local legitFovCircle = Drawing.new("Circle")
-legitFovCircle.Visible = false
-legitFovCircle.Radius = 150
-legitFovCircle.Color = Color3.fromRGB(0, 255, 255)
-legitFovCircle.Transparency = 0.7
-legitFovCircle.Thickness = 1
-legitFovCircle.Filled = false
-
-RunService.RenderStepped:Connect(function()
-    local isLegitActive = Toggles.LegitAimToggle and Toggles.LegitAimToggle.Value
-    local showFov = Toggles.LegitShowFOV and Toggles.LegitShowFOV.Value
-    legitFovCircle.Visible = isLegitActive and showFov
-    if isLegitActive then
-        legitFovCircle.Radius = Options.LegitFOVRadius and Options.LegitFOVRadius.Value or 150
-        legitFovCircle.Position = UserInputService:GetMouseLocation()
-    end
-end)
 
 local function getClosestTargetPlayer()
     local closestPlayer = nil
@@ -901,30 +848,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
 
-    -- NY: Legit Aimbot Logik (Körs endast när man håller invald tangent)
-    if Toggles.LegitAimToggle and Toggles.LegitAimToggle.Value then
-        pcall(function()
-            local isKeyDown = false
-            if Options.LegitKeybind then
-                isKeyDown = Options.LegitKeybind:GetState()
-            end
-
-            if isKeyDown then
-                local targetPart = getLegitTarget()
-                if targetPart then
-                    local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
-                    local smoothness = Options.LegitSmooth and Options.LegitSmooth.Value or 5
-                    
-                    if smoothness <= 1 then
-                        Camera.CFrame = targetCFrame
-                    else
-                        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, math.clamp(deltaTime * smoothness, 0, 1))
-                    end
-                end
-            end
-        end)
-    end
-
     -- Befintlig Ragebot / Enhanced Aimbot Logik
     if Toggles.RagebotToggle and Toggles.RagebotToggle.Value then
         pcall(function()
@@ -979,13 +902,6 @@ RagebotGroup:AddToggle('RageTriggerToggle', { Text = 'Aktivera Inbyggd Triggerbo
 RagebotGroup:AddToggle('RagePrediction', { Text = 'Aktivera Hastighets-Prediktion', Default = true })
 RagebotGroup:AddDropdown('RageTarget', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Sikta På' })
 RagebotGroup:AddSlider('RageSmooth', { Text = 'Sikte Mjukhet (1 = Direkt Snap)', Default = 1, Min = 1, Max = 20, Rounding = 1 })
-
-LegitAimGroup:AddToggle('LegitAimToggle', { Text = 'Aktivera Legit Aimbot', Default = false })
-LegitAimGroup:AddKeybind('LegitKeybind', { Text = 'Aim Keybind (Håll In)', Default = Enum.UserInputType.MouseButton2, Mode = 'Hold', })
-LegitAimGroup:AddDropdown('LegitTargetPart', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Legit Hit Part' })
-LegitAimGroup:AddSlider('LegitSmooth', { Text = 'Legit Mjukhet (Högre = Mjukare)', Default = 5, Min = 1, Max = 30, Rounding = 1 })
-LegitAimGroup:AddToggle('LegitShowFOV', { Text = 'Visa Legit FOV-cirkel', Default = true })
-LegitAimGroup:AddSlider('LegitFOVRadius', { Text = 'Legit FOV Radie', Default = 150, Min = 20, Max = 400, Rounding = 0 })
 
 SilentAimGroup:AddToggle('SilentAimToggle', { Text = 'Aktivera Silent Aim', Default = false, Callback = function(v) SilentSettings.Enabled = v end })
 SilentAimGroup:AddToggle('SilentWallCheck', { Text = 'Silent Wall Check', Default = true, Callback = function(v) SilentSettings.WallCheck = v end })
