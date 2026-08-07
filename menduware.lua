@@ -88,7 +88,7 @@ end
 
 -- 3. Skapa fönster
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Ultimate Edition v4 (Rivals Bypass)',
+    Title = 'Menduware - Ultimate Edition v5 (Rivals Bypass)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -113,6 +113,7 @@ local Tabs = {
 
 local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot / Enhanced Aimbot')
 local SilentAimGroup = Tabs.Combat:AddLeftGroupbox('Silent Aim & FOV')
+local WeaponModsGroup = Tabs.Combat:AddRightGroupbox('No Recoil & No Spread')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
 local CombatMiscGroup = Tabs.Combat:AddRightGroupbox('Antikatana & Melee Mods')
 local VisualsGroup = Tabs.Visuals:AddLeftGroupbox('Player ESP Settings')
@@ -127,7 +128,7 @@ local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Ultimate Voidspam & Chaos'
 local MiscGroup = Tabs.Misc:AddLeftGroupbox('Hitsounds & Hit Messages')
 
 ---------------------------------------------------------
--- SILENT AIM & FOV LOGIK (HOOKED UTILITY)
+-- SILENT AIM & FOV LOGIK
 ---------------------------------------------------------
 local utilityFound, Utility = pcall(function()
     return require(ReplicatedStorage:WaitForChild("Modules", 2):WaitForChild("Utility", 2))
@@ -147,7 +148,6 @@ local SilentSettings = {
     FOVThickness = 1,
 }
 
--- Skapa FOV-cirkel på skärmen
 local fovCircle = Drawing.new("Circle")
 fovCircle.Visible = false
 fovCircle.Radius = SilentSettings.FOVRadius
@@ -233,11 +233,6 @@ local function isVisibleForSilent(origin, targetPart, originalIgnore)
 end
 
 local function getNearestLivingPlayerInFOV()
-    local character = LocalPlayer.Character
-    if not character then return nil end
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return nil end
-    
     local mousePos = UserInputService:GetMouseLocation()
     local closest = nil
     local shortestDist = math.huge
@@ -309,6 +304,37 @@ if Utility and OriginalRaycast then
 end
 
 ---------------------------------------------------------
+-- NO RECOIL & NO SPREAD LOGIK (HOOKS)
+---------------------------------------------------------
+RunService.RenderStepped:Connect(function()
+    local noRecoilActive = Toggles.NoRecoilToggle and Toggles.NoRecoilToggle.Value
+    local noSpreadActive = Toggles.NoSpreadToggle and Toggles.NoSpreadToggle.Value
+
+    if not (noRecoilActive or noSpreadActive) then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    -- Gå igenom spelarens aktiva vapen och modifiera deras egenskaper i realtid
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") then
+            -- Letar efter vanliga interna värden/tabeller för rekyl och spridning
+            pcall(function()
+                -- Om spelet använder attributes eller konstanter i vapnet
+                if noRecoilActive then
+                    if item:GetAttribute("Recoil") then item:SetAttribute("Recoil", 0) end
+                    if item:GetAttribute("CameraShake") then item:SetAttribute("CameraShake", 0) end
+                end
+                if noSpreadActive then
+                    if item:GetAttribute("Spread") then item:SetAttribute("Spread", 0) end
+                    if item:GetAttribute("Inaccuracy") then item:SetAttribute("Inaccuracy", 0) end
+                end
+            end)
+        end
+    end
+end)
+
+---------------------------------------------------------
 -- LJUD & HIT MESSAGES LOGIK
 ---------------------------------------------------------
 local SoundService = game:GetService("SoundService")
@@ -361,7 +387,7 @@ local function sendHitMessage(victimName, damageNum)
 end
 
 ---------------------------------------------------------
--- SKIN CHANGER LOGIK (VAPEN & MATERIAL)
+-- SKIN CHANGER LOGIK
 ---------------------------------------------------------
 local function applySkinChanger()
     if not (Toggles.SkinChangerToggle and Toggles.SkinChangerToggle.Value) then return end
@@ -520,7 +546,7 @@ local function antiKatanaStep()
 end
 
 ---------------------------------------------------------
--- ULTRA ORBIT & HYPER VOIDSPAM LOGIK
+-- ORBIT & VOIDSPAM LOGIK
 ---------------------------------------------------------
 local function getPlayerList()
     local list = {}
@@ -625,31 +651,19 @@ local function voidSpamStep(deltaTime)
     local offset = Vector3.zero
 
     if mode == 'Full 3D Chaos (Explosiv)' then
-        offset = Vector3.new(
-            math.random(-xRange, xRange),
-            math.random(-yRange, yRange),
-            math.random(-zRange, zRange)
-        )
+        offset = Vector3.new(math.random(-xRange, xRange), math.random(-yRange, yRange), math.random(-zRange, zRange))
     elseif mode == 'Sfärisk / Kulan' then
         local phi = math.random() * math.pi * 2
         local costheta = math.random() * 2 - 1
         local theta = math.acos(costheta)
         local r = math.random() * xRange
-        offset = Vector3.new(
-            r * math.sin(theta) * math.cos(phi),
-            r * math.sin(theta) * math.sin(phi),
-            r * math.cos(theta)
-        )
+        offset = Vector3.new(r * math.sin(theta) * math.cos(phi), r * math.sin(theta) * math.sin(phi), r * math.cos(theta))
     elseif mode == 'Endast Höjd (Y-Axis Glitch)' then
         offset = Vector3.new(0, math.random(-yRange, yRange), 0)
     elseif mode == 'Horisontell Hyper-Jitter' then
         offset = Vector3.new(math.random(-xRange, xRange), 0, math.random(-zRange, zRange))
     elseif mode == 'Mikro-Darrning (Stealth Shake)' then
-        offset = Vector3.new(
-            math.random(-4, 4),
-            math.random(-2, 2),
-            math.random(-4, 4)
-        )
+        offset = Vector3.new(math.random(-4, 4), math.random(-2, 2), math.random(-4, 4))
     elseif mode == 'Cylindrisk Pisk-snurr' then
         local angle = math.random() * math.pi * 2
         local r = math.random() * xRange
@@ -904,6 +918,9 @@ SilentAimGroup:AddDropdown('SilentHitPart', { Values = { 'Head', 'HumanoidRootPa
 SilentAimGroup:AddToggle('FOVCircleEnabled', { Text = 'Visa FOV-cirkel', Default = true, Callback = function(v) SilentSettings.FOVCircleEnabled = v end })
 SilentAimGroup:AddSlider('FOVRadius', { Text = 'FOV Radie', Default = 150, Min = 20, Max = 600, Rounding = 0, Callback = function(v) SilentSettings.FOVRadius = v end })
 SilentAimGroup:AddLabel('FOV Cirkel Färg'):AddColorPicker('FOVColorPicker', { Default = Color3.fromRGB(255, 255, 255), Title = 'Välj FOV Färg', Callback = function(v) SilentSettings.FOVColor = v end })
+
+WeaponModsGroup:AddToggle('NoRecoilToggle', { Text = 'Aktivera No Recoil', Default = false })
+WeaponModsGroup:AddToggle('NoSpreadToggle', { Text = 'Aktivera No Spread', Default = false })
 
 AntiAimGroup:AddToggle('AntiAimToggle', { Text = 'Aktivera Avancerad Anti-Aim', Default = false })
 AntiAimGroup:AddDropdown('AntiAimMode', { Values = { 'Spinbot', 'Jitter', 'Desync', 'Backward', 'Freestand' }, Default = 3, Multi = false, Text = 'Anti-Aim Läge' })
