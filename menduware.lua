@@ -53,17 +53,18 @@ pcall(function()
     pcall(function() if d then d.Kick = function() return end end end)
 end)
 
--- 2. Ladda Linoria Library
+-- 2. Säkert laddningssystem för Linoria Library
 local Library, ThemeManager, SaveManager
-pcall(function()
+local success, err = pcall(function()
     local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
     Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
     ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
     SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
 end)
 
-if not Library then
-    return warn("[Menduware]: Kunde inte ladda Linoria UI-biblioteket.")
+if not success or not Library then
+    warn("[Menduware]: Kunde inte ladda Linoria UI-biblioteket. Fel: " .. tostring(err))
+    return
 end
 
 -- 3. Skapa fönster med Linoria Tema
