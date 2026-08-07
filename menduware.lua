@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
+local SoundService = game:GetService("SoundService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
@@ -88,7 +89,7 @@ end
 
 -- 3. Skapa fönster
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Ultimate Edition v5 (Rivals Bypass)',
+    Title = 'Menduware - Ultimate Edition v7 (Rivals Bypass)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -112,7 +113,8 @@ local Tabs = {
 }
 
 local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot / Enhanced Aimbot')
-local SilentAimGroup = Tabs.Combat:AddLeftGroupbox('Silent Aim & FOV')
+local LegitAimGroup = Tabs.Combat:AddLeftGroupbox('Legit Aimbot (Keybind / Hotkey)')
+local SilentAimGroup = Tabs.Combat:AddRightGroupbox('Silent Aim & FOV')
 local WeaponModsGroup = Tabs.Combat:AddRightGroupbox('No Recoil & No Spread')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
 local CombatMiscGroup = Tabs.Combat:AddRightGroupbox('Antikatana & Melee Mods')
@@ -128,7 +130,57 @@ local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Ultimate Voidspam & Chaos'
 local MiscGroup = Tabs.Misc:AddLeftGroupbox('Hitsounds & Hit Messages')
 
 ---------------------------------------------------------
--- SILENT AIM & FOV LOGIK
+-- LJUD & HIT MESSAGES LOGIK (DEFINIERAS FÖRST)
+---------------------------------------------------------
+local hitSounds = {
+    ['Rust'] = "rbxassetid://313386004",
+    ['Neverlose'] = "rbxassetid://6607204111",
+    ['Bell'] = "rbxassetid://6534947240",
+    ['Pop'] = "rbxassetid://198598717",
+    ['OSU'] = "rbxassetid://4638424036"
+}
+
+local function playHitSound()
+    pcall(function()
+        if not (Toggles.HitSoundToggle and Toggles.HitSoundToggle.Value) then return end
+        local soundName = Options.HitSoundDropdown and Options.HitSoundDropdown.Value or 'Rust'
+        local soundId = hitSounds[soundName] or hitSounds['Rust']
+
+        local sound = Instance.new("Sound")
+        sound.SoundId = soundId
+        sound.Volume = Options.HitSoundVolume and Options.HitSoundVolume.Value or 1
+        sound.Parent = SoundService
+        sound:Play()
+        
+        task.delay(3, function()
+            if sound then sound:Destroy() end
+        end)
+    end)
+end
+
+local function sendHitMessage(victimName, damageNum)
+    pcall(function()
+        if not (Toggles.HitMessageToggle and Toggles.HitMessageToggle.Value) then return end
+        
+        local msgType = Options.HitMessageType.Value
+        local text = string.format("[Menduware]: Träffade %s! (-%d HP)", victimName, damageNum or 0)
+
+        if msgType == 'Chat' then
+            game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(text)
+        elseif msgType == 'Notification' then
+            StarterGui:SetCore("SendNotification", {
+                Title = "Hit!",
+                Text = text,
+                Duration = 2
+            })
+        elseif msgType == 'Console' then
+            print(text)
+        end
+    end)
+end
+
+---------------------------------------------------------
+-- SILENT AIM & FOV LOGIK (MED INTEGRERAT HITSOUND)
 ---------------------------------------------------------
 local utilityFound, Utility = pcall(function()
     return require(ReplicatedStorage:WaitForChild("Modules", 2):WaitForChild("Utility", 2))
@@ -198,20 +250,14 @@ local function isVisibleForSilent(origin, targetPart, originalIgnore)
     local ignoreList = {}
 
     local localChar = LocalPlayer.Character
-    if localChar then
-        table.insert(ignoreList, localChar)
-    end
+    if localChar then table.insert(ignoreList, localChar) end
 
     local targetChar = targetPart.Parent
-    if targetChar then
-        table.insert(ignoreList, targetChar)
-    end
+    if targetChar then table.insert(ignoreList, targetChar) end
 
     if originalIgnore then
         if type(originalIgnore) == "table" then
-            for _, v in ipairs(originalIgnore) do
-                table.insert(ignoreList, v)
-            end
+            for _, v in ipairs(originalIgnore) do table.insert(ignoreList, v) end
         else
             table.insert(ignoreList, originalIgnore)
         end
@@ -220,9 +266,7 @@ local function isVisibleForSilent(origin, targetPart, originalIgnore)
     raycastParams.FilterDescendantsInstances = ignoreList
 
     local result = Workspace:Raycast(origin, direction, raycastParams)
-    if not result then
-        return true
-    end
+    if not result then return true end
 
     local hitInstance = result.Instance
     if hitInstance == targetPart or (targetChar and hitInstance:IsDescendantOf(targetChar)) then
@@ -284,6 +328,10 @@ if Utility and OriginalRaycast then
             return OriginalRaycast(self, from, to, range, ignore, mode, debug)
         end
 
+        -- Träffbekräftelse via Silent Aim! Spela ljud och skicka notis
+        playHitSound()
+        sendHitMessage(target.Name, 25)
+
         local hitPosition = hitPart.Position
         local direction = (hitPosition - from).Unit
         local distance = (hitPosition - from).Magnitude
@@ -304,7 +352,7 @@ if Utility and OriginalRaycast then
 end
 
 ---------------------------------------------------------
--- NO RECOIL & NO SPREAD LOGIK (HOOKS)
+-- NO RECOIL & NO SPREAD LOGIK
 ---------------------------------------------------------
 RunService.RenderStepped:Connect(function()
     local noRecoilActive = Toggles.NoRecoilToggle and Toggles.NoRecoilToggle.Value
@@ -315,12 +363,9 @@ RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
 
-    -- Gå igenom spelarens aktiva vapen och modifiera deras egenskaper i realtid
     for _, item in ipairs(char:GetChildren()) do
         if item:IsA("Tool") then
-            -- Letar efter vanliga interna värden/tabeller för rekyl och spridning
             pcall(function()
-                -- Om spelet använder attributes eller konstanter i vapnet
                 if noRecoilActive then
                     if item:GetAttribute("Recoil") then item:SetAttribute("Recoil", 0) end
                     if item:GetAttribute("CameraShake") then item:SetAttribute("CameraShake", 0) end
@@ -333,58 +378,6 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
-
----------------------------------------------------------
--- LJUD & HIT MESSAGES LOGIK
----------------------------------------------------------
-local SoundService = game:GetService("SoundService")
-
-local hitSounds = {
-    ['Rust'] = "rbxassetid://313386004",
-    ['Neverlose'] = "rbxassetid://6607204111",
-    ['Bell'] = "rbxassetid://6534947240",
-    ['Pop'] = "rbxassetid://198598717",
-    ['OSU'] = "rbxassetid://4638424036"
-}
-
-local function playHitSound()
-    if not (Toggles.HitSoundToggle and Toggles.HitSoundToggle.Value) then return end
-    local soundName = Options.HitSoundDropdown.Value
-    local soundId = hitSounds[soundName] or hitSounds['Rust']
-
-    local sound = Instance.new("Sound")
-    sound.SoundId = soundId
-    sound.Volume = Options.HitSoundVolume.Value
-    sound.Parent = SoundService
-    sound:Play()
-    
-    sound.Ended:Connect(function()
-        sound:Destroy()
-    end)
-end
-
-local function sendHitMessage(victimName, damageNum)
-    if not (Toggles.HitMessageToggle and Toggles.HitMessageToggle.Value) then return end
-    
-    local msgType = Options.HitMessageType.Value
-    local text = string.format("[Menduware]: Träffade %s! (-%d HP)", victimName, damageNum or 0)
-
-    if msgType == 'Chat' then
-        pcall(function()
-            game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(text)
-        end)
-    elseif msgType == 'Notification' then
-        pcall(function()
-            StarterGui:SetCore("SendNotification", {
-                Title = "Hit!",
-                Text = text,
-                Duration = 2
-            })
-        end)
-    elseif msgType == 'Console' then
-        print(text)
-    end
-end
 
 ---------------------------------------------------------
 -- SKIN CHANGER LOGIK
@@ -488,6 +481,57 @@ local function getBestTarget()
     end
     return bestTargetPart
 end
+
+---------------------------------------------------------
+-- NY: LEGIT AIMBOT (KEYBIND / TARGET LOCK) LOGIK
+---------------------------------------------------------
+local function getLegitTarget()
+    local mousePos = UserInputService:GetMouseLocation()
+    local closest = nil
+    local shortestDist = math.huge
+    local targetPartName = Options.LegitTargetPart and Options.LegitTargetPart.Value or "Head"
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isPlayerAlive(player) then
+            local character = player.Character
+            local targetPart = character and character:FindFirstChild(targetPartName)
+            if targetPart then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                if onScreen then
+                    local screenVector = Vector2.new(screenPos.X, screenPos.Y)
+                    local distToMouse = (screenVector - mousePos).Magnitude
+                    local maxDist = Options.LegitFOVRadius and Options.LegitFOVRadius.Value or 150
+
+                    if distToMouse <= maxDist then
+                        if distToMouse < shortestDist then
+                            shortestDist = distToMouse
+                            closest = targetPart
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local legitFovCircle = Drawing.new("Circle")
+legitFovCircle.Visible = false
+legitFovCircle.Radius = 150
+legitFovCircle.Color = Color3.fromRGB(0, 255, 255)
+legitFovCircle.Transparency = 0.7
+legitFovCircle.Thickness = 1
+legitFovCircle.Filled = false
+
+RunService.RenderStepped:Connect(function()
+    local isLegitActive = Toggles.LegitAimToggle and Toggles.LegitAimToggle.Value
+    local showFov = Toggles.LegitShowFOV and Toggles.LegitShowFOV.Value
+    legitFovCircle.Visible = isLegitActive and showFov
+    if isLegitActive then
+        legitFovCircle.Radius = Options.LegitFOVRadius and Options.LegitFOVRadius.Value or 150
+        legitFovCircle.Position = UserInputService:GetMouseLocation()
+    end
+end)
 
 local function getClosestTargetPlayer()
     local closestPlayer = nil
@@ -857,6 +901,31 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
 
+    -- NY: Legit Aimbot Logik (Körs endast när man håller invald tangent)
+    if Toggles.LegitAimToggle and Toggles.LegitAimToggle.Value then
+        pcall(function()
+            local isKeyDown = false
+            if Options.LegitKeybind then
+                isKeyDown = Options.LegitKeybind:GetState()
+            end
+
+            if isKeyDown then
+                local targetPart = getLegitTarget()
+                if targetPart then
+                    local targetCFrame = CFrame.new(Camera.CFrame.Position, targetPart.Position)
+                    local smoothness = Options.LegitSmooth and Options.LegitSmooth.Value or 5
+                    
+                    if smoothness <= 1 then
+                        Camera.CFrame = targetCFrame
+                    else
+                        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, math.clamp(deltaTime * smoothness, 0, 1))
+                    end
+                end
+            end
+        end)
+    end
+
+    -- Befintlig Ragebot / Enhanced Aimbot Logik
     if Toggles.RagebotToggle and Toggles.RagebotToggle.Value then
         pcall(function()
             local targetData = getBestTarget()
@@ -911,6 +980,13 @@ RagebotGroup:AddToggle('RagePrediction', { Text = 'Aktivera Hastighets-Prediktio
 RagebotGroup:AddDropdown('RageTarget', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Sikta På' })
 RagebotGroup:AddSlider('RageSmooth', { Text = 'Sikte Mjukhet (1 = Direkt Snap)', Default = 1, Min = 1, Max = 20, Rounding = 1 })
 
+LegitAimGroup:AddToggle('LegitAimToggle', { Text = 'Aktivera Legit Aimbot', Default = false })
+LegitAimGroup:AddKeybind('LegitKeybind', { Text = 'Aim Keybind (Håll In)', Default = Enum.UserInputType.MouseButton2, Mode = 'Hold', })
+LegitAimGroup:AddDropdown('LegitTargetPart', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Legit Hit Part' })
+LegitAimGroup:AddSlider('LegitSmooth', { Text = 'Legit Mjukhet (Högre = Mjukare)', Default = 5, Min = 1, Max = 30, Rounding = 1 })
+LegitAimGroup:AddToggle('LegitShowFOV', { Text = 'Visa Legit FOV-cirkel', Default = true })
+LegitAimGroup:AddSlider('LegitFOVRadius', { Text = 'Legit FOV Radie', Default = 150, Min = 20, Max = 400, Rounding = 0 })
+
 SilentAimGroup:AddToggle('SilentAimToggle', { Text = 'Aktivera Silent Aim', Default = false, Callback = function(v) SilentSettings.Enabled = v end })
 SilentAimGroup:AddToggle('SilentWallCheck', { Text = 'Silent Wall Check', Default = true, Callback = function(v) SilentSettings.WallCheck = v end })
 SilentAimGroup:AddSlider('SilentHitChance', { Text = 'Hit Chance %', Default = 100, Min = 1, Max = 100, Rounding = 0, Callback = function(v) SilentSettings.HitChance = v end })
@@ -959,7 +1035,7 @@ OrbitTeleportGroup:AddDropdown('OrbitMode', { Values = { 'Standard Cirkel', 'Ell
 OrbitTeleportGroup:AddToggle('OrbitLookAtTarget', { Text = 'Fixera Kamera/Blick mot Målet', Default = true })
 OrbitTeleportGroup:AddSlider('OrbitTpRadius', { Text = 'Orbit Radie / Avstånd', Default = 10, Min = 1, Max = 100, Rounding = 0 })
 OrbitTeleportGroup:AddSlider('OrbitEllipticX', { Text = 'Ellips X-Sträckning (Bredd)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
-OrbitTeleportGroup:AddSlider('OrbitEllipticZ', { Text = 'Ellips Z-Sträckning (Djup)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
+OrbitEllipticZ = OrbitTeleportGroup:AddSlider('OrbitEllipticZ', { Text = 'Ellips Z-Sträckning (Djup)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
 OrbitTeleportGroup:AddSlider('OrbitTpHeight', { Text = 'Orbit Höjd (Offset)', Default = 0, Min = -30, Max = 50, Rounding = 0 })
 OrbitTeleportGroup:AddSlider('OrbitSpeed', { Text = 'Orbit Hastighet (Varv/s)', Default = 90, Min = 10, Max = 500, Rounding = 0 })
 OrbitTeleportGroup:AddButton('Uppdatera spelarlista', function()
@@ -971,7 +1047,7 @@ VoidSpamGroup:AddToggle('VoidSpamAnchor', { Text = 'Lås Centrumposition (Boosta
 VoidSpamGroup:AddDropdown('VoidSpamMode', { Values = { 'Full 3D Chaos (Explosiv)', 'Sfärisk / Kulan', 'Endast Höjd (Y-Axis Glitch)', 'Horisontell Hyper-Jitter', 'Mikro-Darrning (Stealth Shake)', 'Cylindrisk Pisk-snurr' }, Default = 1, Multi = false, Text = 'Voidspam / Chaos Läge' })
 VoidSpamGroup:AddSlider('VoidSpamSpeed', { Text = 'Spam-Frekvens (Tills/Sek)', Default = 35, Min = 5, Max = 120, Rounding = 0 })
 VoidSpamGroup:AddSlider('VoidSpamX', { Text = 'X-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
-VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
+VoidSpeedY = VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
 VoidSpamGroup:AddSlider('VoidSpamZ', { Text = 'Z-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
 
 MiscGroup:AddToggle('HitSoundToggle', { Text = 'Aktivera Hit Sound', Default = true })
