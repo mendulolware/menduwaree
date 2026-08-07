@@ -53,7 +53,7 @@ pcall(function()
     pcall(function() if d then d.Kick = function() return end end end)
 end)
 
--- 2. Ladda Obsidian Library
+-- 2. Ladda Linoria Library
 local Library, ThemeManager, SaveManager
 pcall(function()
     local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
@@ -63,12 +63,12 @@ pcall(function()
 end)
 
 if not Library then
-    return warn("[Menduware]: Kunde inte ladda UI-biblioteket.")
+    return warn("[Menduware]: Kunde inte ladda Linoria UI-biblioteket.")
 end
 
--- 3. Skapa fönster med Obsidian Tema
+-- 3. Skapa fönster med Linoria Tema
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Obsidian Edition (Advanced Rage & Combat)',
+    Title = 'Menduware - Linoria Edition (Advanced Rage & Combat)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -434,7 +434,6 @@ local function ragebotModesStep(deltaTime)
     if not rootPart or not targetRoot then return end
 
     if mode == 'Rage Snap / Lock' then
-        -- Snäpper kameran direkt mot målet
         local targetPos = targetRoot.Position
         if Toggles.RagePrediction and Toggles.RagePrediction.Value then
             targetPos = targetPos + (targetRoot.AssemblyLinearVelocity * 0.04)
@@ -442,7 +441,6 @@ local function ragebotModesStep(deltaTime)
         Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
 
     elseif mode == 'Rage Orbit Target' then
-        -- Cirkulerar automatiskt runt närmaste fiende i Ragebot
         local speed = Options.RageOrbitSpeed.Value or 120
         rageOrbitAngle = (rageOrbitAngle + speed * deltaTime) % 360
         local radAngle = math.rad(rageOrbitAngle)
@@ -454,12 +452,10 @@ local function ragebotModesStep(deltaTime)
         rootPart.CFrame = CFrame.new(newPos, tPos)
 
     elseif mode == 'Rage Teleport Behind' then
-        -- Teleporterar automatiskt direkt bakom fienden
         local behindOffset = targetRoot.CFrame.LookVector * -5 + Vector3.new(0, 1, 0)
         rootPart.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
 
     elseif mode == 'Rage Voidspam Chaos' then
-        -- Skapar intensivt kaos och teleport-glitch runt fiendens position
         local rx = math.random(-15, 15)
         local ry = math.random(0, 10)
         local rz = math.random(-15, 15)
@@ -690,7 +686,6 @@ RunService.RenderStepped:Connect(function()
                             local boxX = topValid.X - (width / 2)
                             local boxY = topValid.Y
 
-                            -- Box
                             if Toggles.ESPBoxes and Toggles.ESPBoxes.Value then
                                 drawings.BoxOutline.Visible = true
                                 drawings.BoxOutline.Position = Vector2.new(boxX, boxY)
@@ -717,7 +712,6 @@ RunService.RenderStepped:Connect(function()
                                 drawings.BoxFilled.Visible = false
                             end
 
-                            -- Health Bar
                             if Toggles.ESPHealthBar and Toggles.ESPHealthBar.Value then
                                 local hpPct = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
                                 local barH = height * hpPct
@@ -734,7 +728,6 @@ RunService.RenderStepped:Connect(function()
                                 drawings.HealthBar.Visible = false
                             end
 
-                            -- Namn & Text
                             if Toggles.ESPNames and Toggles.ESPNames.Value then
                                 drawings.NameText.Visible = true
                                 drawings.NameText.Text = player.Name
@@ -744,7 +737,6 @@ RunService.RenderStepped:Connect(function()
                                 drawings.NameText.Visible = false
                             end
 
-                            -- Tracers
                             if Toggles.ESPTracers and Toggles.ESPTracers.Value then
                                 drawings.Tracer.Visible = true
                                 drawings.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
@@ -807,7 +799,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 end)
 
 ---------------------------------------------------------
--- UI ELEMENT (OBSIDIAN / DARK THEME CONFIG)
+-- UI ELEMENT (LINORIA LIBRARY)
 ---------------------------------------------------------
 RagebotGroup:AddToggle('RagebotToggle', { Text = 'Aktivera Ragebot / Automatisk Läge', Default = false })
 RagebotGroup:AddDropdown('RageModeDropdown', { Values = { 'Rage Snap / Lock', 'Rage Orbit Target', 'Rage Teleport Behind', 'Rage Voidspam Chaos' }, Default = 1, Multi = false, Text = 'Ragebot Stridsläge' })
@@ -896,8 +888,8 @@ MiscGroup:AddDropdown('HitMessageType', { Values = { 'Notification', 'Console', 
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetFolder('Menduware_Obsidian')
-ThemeManager:SetFolder('Menduware_Obsidian')
+SaveManager:SetFolder('Menduware_Linoria')
+ThemeManager:SetFolder('Menduware_Linoria')
 SaveManager:BuildConfigSection(Tabs['UI Settings'])
 ThemeManager:ApplyToTab(Tabs['UI Settings'])
 SaveManager:LoadAutoloadConfig()
