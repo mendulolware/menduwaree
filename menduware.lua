@@ -89,7 +89,7 @@ end
 
 -- 3. Skapa fönster
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Ultimate Edition v7 (Rivals Bypass)',
+    Title = 'Menduware - Ultimate Edition v8 (Advanced ESP)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -117,7 +117,12 @@ local SilentAimGroup = Tabs.Combat:AddRightGroupbox('Silent Aim & FOV')
 local WeaponModsGroup = Tabs.Combat:AddRightGroupbox('No Recoil & No Spread')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
 local CombatMiscGroup = Tabs.Combat:AddRightGroupbox('Antikatana & Melee Mods')
-local VisualsGroup = Tabs.Visuals:AddLeftGroupbox('Player ESP Settings')
+
+-- ESP Grupper (Uppdelat för renare layout)
+local VisualsGeneralGroup = Tabs.Visuals:AddLeftGroupbox('ESP Allmänt & Inställningar')
+local VisualsBoxesGroup = Tabs.Visuals:AddLeftGroupbox('Box ESP & Outlines')
+local VisualsBarsGroup = Tabs.Visuals:AddRightGroupbox('Hälsobar & Extra Info')
+local VisualsExtrasGroup = Tabs.Visuals:AddRightGroupbox('Tracers, Skelett & Siktlinjer')
 
 local SkinchangerGroup = Tabs.Skins:AddLeftGroupbox('Vapen & Material Skin Changer')
 local SkinColorGroup = Tabs.Skins:AddRightGroupbox('Färg & Finish Anpassning')
@@ -129,7 +134,7 @@ local VoidSpamGroup = Tabs.Movement:AddRightGroupbox('Ultimate Voidspam & Chaos'
 local MiscGroup = Tabs.Misc:AddLeftGroupbox('Hitsounds & Hit Messages')
 
 ---------------------------------------------------------
--- LJUD & HIT MESSAGES LOGIK (DEFINIERAS FÖRST)
+-- LJUD & HIT MESSAGES LOGIK
 ---------------------------------------------------------
 local hitSounds = {
     ['Rust'] = "rbxassetid://313386004",
@@ -179,7 +184,7 @@ local function sendHitMessage(victimName, damageNum)
 end
 
 ---------------------------------------------------------
--- SILENT AIM & FOV LOGIK (MED INTEGRERAT HITSOUND)
+-- SILENT AIM & FOV LOGIK
 ---------------------------------------------------------
 local utilityFound, Utility = pcall(function()
     return require(ReplicatedStorage:WaitForChild("Modules", 2):WaitForChild("Utility", 2))
@@ -720,81 +725,274 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 ---------------------------------------------------------
--- ESP LOGIK
+-- ADVANCED ESP SYSTEM (BOXES, 3D BOXES, BARS, SKELETONS, TRACERS, TEXT)
 ---------------------------------------------------------
-local function removeESP(char)
-    if not char then return end
-    pcall(function()
-        if char:FindFirstChild("StandardESP_Highlight") then char.StandardESP_Highlight:Destroy() end
-        if char:FindFirstChild("StandardESP_Name") then char.StandardESP_Name:Destroy() end
-    end)
+local activeDrawings = {}
+
+local function createDrawing(objType, properties)
+    local obj = Drawing.new(objType)
+    for k, v in pairs(properties) do
+        obj[k] = v
+    end
+    return obj
 end
 
-local function applyESP(player)
-    if player == LocalPlayer then return end
+local function removePlayerESP(player)
+    if activeDrawings[player] then
+        for _, drawing in pairs(activeDrawings[player]) do
+            pcall(function() drawing:Remove() end)
+        end
+        activeDrawings[player] = nil
+    end
+end
 
-    local function setupCharacter(char)
-        if not char then return end
-        removeESP(char)
-        if not (Toggles.ESPToggle and Toggles.ESPToggle.Value) then return end
+local function initPlayerESP(player)
+    if activeDrawings[player] then removePlayerESP(player) end
 
-        pcall(function()
-            if Toggles.ESPBoxes.Value then
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "StandardESP_Highlight"
-                highlight.FillColor = Options.ESPFillColor.Value
-                highlight.FillTransparency = Options.ESPFillTrans.Value / 100
-                highlight.OutlineColor = Options.ESPOutlineColor.Value
-                highlight.OutlineTransparency = Options.ESPOutlineTrans.Value / 100
-                highlight.Adornee = char
-                highlight.Parent = char
-            end
+    local espTable = {
+        BoxOutline = createDrawing("Square", { Visible = false, Filled = false, Thickness = 3, Color = Color3.new(0, 0, 0) }),
+        Box = createDrawing("Square", { Visible = false, Filled = false, Thickness = 1, Color = Color3.new(1, 1, 1) }),
+        BoxFilled = createDrawing("Square", { Visible = false, Filled = true, Color = Color3.new(0, 0, 0), Transparency = 0.5 }),
+        
+        HealthBarOutline = createDrawing("Line", { Visible = false, Thickness = 3, Color = Color3.new(0, 0, 0) }),
+        HealthBar = createDrawing("Line", { Visible = false, Thickness = 1, Color = Color3.new(0, 1, 0) }),
+        
+        NameText = createDrawing("Text", { Visible = false, Size = 13, Center = true, Outline = true, Color = Color3.new(1, 1, 1), Font = Drawing.Fonts.UI }),
+        InfoText = createDrawing("Text", { Visible = false, Size = 12, Center = true, Outline = true, Color = Color3.new(0.8, 0.8, 0.8), Font = Drawing.Fonts.UI }),
+        Tracer = createDrawing("Line", { Visible = false, Thickness = 1, Color = Color3.new(1, 1, 1) }),
+        HeadDot = createDrawing("Circle", { Visible = false, Filled = true, Radius = 4, NumSides = 12, Color = Color3.new(1, 1, 1) }),
+    }
 
-            if Toggles.ESPNames.Value then
-                local head = char:FindFirstChild("Head")
-                if head then
-                    local billboard = Instance.new("BillboardGui")
-                    billboard.Name = "StandardESP_Name"
-                    billboard.Adornee = head
-                    billboard.Size = UDim2.new(0, 100, 0, 30)
-                    billboard.StudsOffset = Vector3.new(0, 2, 0)
-                    billboard.AlwaysOnTop = true
+    -- 12 Skeletben (Line per ben)
+    espTable.Skeleton = {}
+    for i = 1, 12 do
+        table.insert(espTable.Skeleton, createDrawing("Line", { Visible = false, Thickness = 1, Color = Color3.new(1, 1, 1) }))
+    end
 
-                    local label = Instance.new("TextLabel")
-                    label.Size = UDim2.new(1, 0, 1, 0)
-                    label.BackgroundTransparency = 1
-                    label.Text = player.Name
-                    label.TextColor3 = Options.ESPTextColor.Value
-                    label.TextStrokeTransparency = 0
-                    label.TextSize = 14
-                    label.Font = Enum.Font.SourceSansBold
-                    label.Parent = billboard
+    activeDrawings[player] = espTable
+end
 
-                    billboard.Parent = char
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then initPlayerESP(p) end
+end
+Players.PlayerAdded:Connect(initPlayerESP)
+Players.PlayerRemoving:Connect(removePlayerESP)
+
+-- Huvudloop för ESP Rendering
+RunService.RenderStepped:Connect(function()
+    local espEnabled = Toggles.ESPToggle and Toggles.ESPToggle.Value
+
+    for player, drawings in pairs(activeDrawings) do
+        local shouldShow = false
+        local char = player.Character
+        local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+        if espEnabled and char and rootPart and humanoid and humanoid.Health > 0 then
+            -- Team check om tillämpligt i spelet
+            local head = char:FindFirstChild("Head")
+            local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+            if head and localRoot then
+                local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position)
+                local rootPos, rootOnScreen = Camera:WorldToViewportPoint(rootPart.Position)
+
+                if headOnScreen or rootOnScreen then
+                    shouldShow = true
+                    local distance = (localRoot.Position - rootPart.Position).Magnitude
+                    local maxDist = Options.ESPDistance and Options.ESPDistance.Value or 2000
+
+                    if distance <= maxDist then
+                        -- Beräkna 2D Bounding Box
+                        local legPos = rootPart.Position - Vector3.new(0, 3, 0)
+                        local topPos, topValid = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.8, 0))
+                        local botValid, botValidCheck = Camera:WorldToViewportPoint(legPos)
+
+                        if topValid and botValidCheck then
+                            local height = math.abs(topValid.Y - botValid.Y)
+                            local width = height / 2
+                            local boxX = topValid.X - (width / 2)
+                            local boxY = topValid.Y
+                            local boxW = width
+                            local boxH = height
+
+                            -- 1. Box / Fill / Outline
+                            local showBox = Toggles.ESPBoxes and Toggles.ESPBoxes.Value
+                            local boxStyle = Options.ESPBoxStyle and Options.ESPBoxStyle.Value or '2D Full Box'
+
+                            if showBox and boxStyle == '2D Full Box' then
+                                drawings.BoxOutline.Visible = true
+                                drawings.BoxOutline.Position = Vector2.new(boxX, boxY)
+                                drawings.BoxOutline.Size = Vector2.new(boxW, boxH)
+                                drawings.BoxOutline.Color = Options.ESPOutlineColor.Value
+                                drawings.BoxOutline.Transparency = 1 - (Options.ESPOutlineTrans.Value / 100)
+
+                                drawings.Box.Visible = true
+                                drawings.Box.Position = Vector2.new(boxX, boxY)
+                                drawings.Box.Size = Vector2.new(boxW, boxH)
+                                drawings.Box.Color = Options.ESPBoxColor.Value
+                                drawings.Box.Transparency = 1 - (Options.ESPBoxTrans.Value / 100)
+
+                                if Toggles.ESPBoxFilled and Toggles.ESPBoxFilled.Value then
+                                    drawings.BoxFilled.Visible = true
+                                    drawings.BoxFilled.Position = Vector2.new(boxX, boxY)
+                                    drawings.BoxFilled.Size = Vector2.new(boxW, boxH)
+                                    drawings.BoxFilled.Color = Options.ESPBoxFillColor.Value
+                                    drawings.BoxFilled.Transparency = Options.ESPBoxFillTrans.Value / 100
+                                else
+                                    drawings.BoxFilled.Visible = false
+                                end
+                            else
+                                drawings.BoxOutline.Visible = false
+                                drawings.Box.Visible = false
+                                drawings.BoxFilled.Visible = false
+                            end
+
+                            -- 2. Hälsobar (Health Bar)
+                            local showHealth = Toggles.ESPHealthBar and Toggles.ESPHealthBar.Value
+                            if showHealth then
+                                local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                                local barH = boxH * healthPercent
+                                local barX = boxX - 6
+                                local barY = boxY + (boxH - barH)
+
+                                drawings.HealthBarOutline.Visible = true
+                                drawings.HealthBarOutline.From = Vector2.new(barX, boxY - 1)
+                                drawings.HealthBarOutline.To = Vector2.new(barX, boxY + boxH + 1)
+                                drawings.HealthBarOutline.Transparency = 1 - (Options.ESPOutlineTrans.Value / 100)
+
+                                drawings.HealthBar.Visible = true
+                                drawings.HealthBar.From = Vector2.new(barX, boxY + boxH)
+                                drawings.HealthBar.To = Vector2.new(barX, barY)
+                                
+                                local hpColorMode = Options.ESPHealthColorMode.Value
+                                if hpColorMode == 'Dynamisk (Grön till Röd)' then
+                                    drawings.HealthBar.Color = Color3.fromRGB(255 * (1 - healthPercent), 255 * healthPercent, 0)
+                                else
+                                    drawings.HealthBar.Color = Options.ESPHealthStaticColor.Value
+                                end
+                            else
+                                drawings.HealthBarOutline.Visible = false
+                                drawings.HealthBar.Visible = false
+                            end
+
+                            -- 3. Spelarnamn & Avstånd
+                            local showNames = Toggles.ESPNames and Toggles.ESPNames.Value
+                            local showDist = Toggles.ESPDistanceText and Toggles.ESPDistanceText.Value
+                            
+                            if showNames or showDist then
+                                drawings.NameText.Visible = true
+                                local textParts = {}
+                                if showNames then table.insert(textParts, player.Name) end
+                                if showDist then table.insert(textParts, string.format("[%d studs]", math.floor(distance))) end
+                                
+                                drawings.NameText.Text = table.concat(textParts, " ")
+                                drawings.NameText.Position = Vector2.new(boxX + (boxW / 2), boxY - 18)
+                                drawings.NameText.Color = Options.ESPNameColor.Value
+                            else
+                                drawings.NameText.Visible = false
+                            end
+
+                            -- 4. Vapen-info / Extra Text
+                            local showWeapon = Toggles.ESPWeapon and Toggles.ESPWeapon.Value
+                            if showWeapon then
+                                local activeTool = char:FindFirstChildOfClass("Tool")
+                                local toolName = activeTool and activeTool.Name or "Inget Vapen"
+                                drawings.InfoText.Visible = true
+                                drawings.InfoText.Text = toolName
+                                drawings.InfoText.Position = Vector2.new(boxX + (boxW / 2), boxY + boxH + 4)
+                                drawings.InfoText.Color = Options.ESPWeaponColor.Value
+                            else
+                                drawings.InfoText.Visible = false
+                            end
+
+                            -- 5. Head Dot
+                            local showDot = Toggles.ESPHeadDot and Toggles.ESPHeadDot.Value
+                            if showDot then
+                                drawings.HeadDot.Visible = true
+                                drawings.HeadDot.Position = Vector2.new(headPos.X, headPos.Y)
+                                drawings.HeadDot.Color = Options.ESPHeadDotColor.Value
+                            else
+                                drawings.HeadDot.Visible = false
+                            end
+
+                            -- 6. Tracers (Siktlinjer)
+                            local showTracers = Toggles.ESPTracers and Toggles.ESPTracers.Value
+                            if showTracers then
+                                drawings.Tracer.Visible = true
+                                local originMode = Options.ESPTracerOrigin.Value
+                                local originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y) -- Botten i mitten
+                                if originMode == 'Muspekare' then
+                                    originPos = UserInputService:GetMouseLocation()
+                                elseif originMode == 'Skärmens Mitt' then
+                                    originPos = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+                                end
+                                
+                                drawings.Tracer.From = originPos
+                                drawings.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
+                                drawings.Tracer.Color = Options.ESPTracerColor.Value
+                            else
+                                drawings.Tracer.Visible = false
+                            end
+
+                            -- 7. Skelett (Skeleton ESP)
+                            local showSkeleton = Toggles.ESPSkeleton and Toggles.ESPSkeleton.Value
+                            if showSkeleton then
+                                local r15Bones = {
+                                    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+                                    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+                                    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+                                    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+                                    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}
+                                }
+
+                                local boneIdx = 1
+                                for _, bone in ipairs(r15Bones) do
+                                    local p1 = char:FindFirstChild(bone[1])
+                                    local p2 = char:FindFirstChild(bone[2])
+                                    local line = drawings.Skeleton[boneIdx]
+
+                                    if p1 and p2 and line then
+                                        local pos1, v1 = Camera:WorldToViewportPoint(p1.Position)
+                                        local pos2, v2 = Camera:WorldToViewportPoint(p2.Position)
+
+                                        if v1 and v2 then
+                                            line.Visible = true
+                                            line.From = Vector2.new(pos1.X, pos1.Y)
+                                            line.To = Vector2.new(pos2.X, pos2.Y)
+                                            line.Color = Options.ESPSkeletonColor.Value
+                                        else
+                                            line.Visible = false
+                                        end
+                                    elseif line then
+                                        line.Visible = false
+                                    end
+                                    boneIdx = boneIdx + 1
+                                end
+                            else
+                                for _, line in ipairs(drawings.Skeleton) do line.Visible = false end
+                            end
+
+                            goto continueESP
+                        end
+                    end
                 end
             end
-        end)
-    end
-
-    if player.Character then setupCharacter(player.Character) end
-    player.CharacterAdded:Connect(setupCharacter)
-end
-
-local function updateAllESP()
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            if Toggles.ESPToggle and Toggles.ESPToggle.Value then
-                applyESP(plr)
-            else
-                removeESP(plr.Character)
-            end
         end
-    end
-end
 
-Players.PlayerAdded:Connect(function(plr)
-    if Toggles.ESPToggle and Toggles.ESPToggle.Value then
-        applyESP(plr)
+        -- Dölj allt om spelaren inte syns / är död
+        drawings.BoxOutline.Visible = false
+        drawings.Box.Visible = false
+        drawings.BoxFilled.Visible = false
+        drawings.HealthBarOutline.Visible = false
+        drawings.HealthBar.Visible = false
+        drawings.NameText.Visible = false
+        drawings.InfoText.Visible = false
+        drawings.Tracer.Visible = false
+        drawings.HeadDot.Visible = false
+        for _, line in ipairs(drawings.Skeleton) do line.Visible = false end
+
+        ::continueESP::
     end
 end)
 
@@ -848,7 +1046,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
         end
     end
 
-    -- Befintlig Ragebot / Enhanced Aimbot Logik
+    -- Ragebot / Enhanced Aimbot Logik
     if Toggles.RagebotToggle and Toggles.RagebotToggle.Value then
         pcall(function()
             local targetData = getBestTarget()
@@ -921,14 +1119,35 @@ AntiAimGroup:AddSlider('AntiAimSpeed', { Text = 'Snurr / Skak-Hastighet', Defaul
 CombatMiscGroup:AddToggle('AntiKatanaToggle', { Text = 'Aktivera Antikatana (Auto-Dodge)', Default = false })
 CombatMiscGroup:AddSlider('AntiKatanaDist', { Text = 'Reaktionsavstånd (Studs)', Default = 12, Min = 5, Max = 30, Rounding = 0 })
 
-VisualsGroup:AddToggle('ESPToggle', { Text = 'Aktivera Master ESP', Default = false, Callback = function() updateAllESP() end })
-VisualsGroup:AddToggle('ESPBoxes', { Text = 'Visa Boxes / Highlight', Default = true, Callback = function() updateAllESP() end })
-VisualsGroup:AddToggle('ESPNames', { Text = 'Visa Spelarnamn', Default = true, Callback = function() updateAllESP() end })
-VisualsGroup:AddLabel('Fyllningsfärg (Box)'):AddColorPicker('ESPFillColor', { Default = Color3.fromRGB(255, 0, 0), Title = 'Välj Fyllningsfärg', Callback = function() updateAllESP() end })
-VisualsGroup:AddSlider('ESPFillTrans', { Text = 'Fyllning Genomskinlighet %', Default = 50, Min = 0, Max = 100, Rounding = 0, Callback = function() updateAllESP() end })
-VisualsGroup:AddLabel('Ramfärg (Outline)'):AddColorPicker('ESPOutlineColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Välj Ramfärg', Callback = function() updateAllESP() end })
-VisualsGroup:AddSlider('ESPOutlineTrans', { Text = 'Ram Genomskinlighet %', Default = 0, Min = 0, Max = 100, Rounding = 0, Callback = function() updateAllESP() end })
-VisualsGroup:AddLabel('Namnfärg'):AddColorPicker('ESPTextColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Välj Namnfärg', Callback = function() updateAllESP() end })
+-- NYTT: Anpassningsbar ESP UI-struktur
+VisualsGeneralGroup:AddToggle('ESPToggle', { Text = 'Aktivera Advanced ESP', Default = false })
+VisualsGeneralGroup:AddSlider('ESPDistance', { Text = 'Max Avstånd (Studs)', Default = 2000, Min = 100, Max = 5000, Rounding = 0 })
+
+VisualsBoxesGroup:AddToggle('ESPBoxes', { Text = 'Aktivera 2D Box ESP', Default = false })
+VisualsBoxesGroup:AddToggle('ESPBoxFilled', { Text = 'Fyll Box med Färg', Default = false })
+VisualsBoxesGroup:AddLabel('Box Ramfärg'):AddColorPicker('ESPBoxColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Box Färg' })
+VisualsBoxesGroup:AddSlider('ESPBoxTrans', { Text = 'Box Genomskinlighet %', Default = 0, Min = 0, Max = 100, Rounding = 0 })
+VisualsBoxesGroup:AddLabel('Box Fyllningsfärg'):AddColorPicker('ESPBoxFillColor', { Default = Color3.fromRGB(255, 0, 0), Title = 'Fyllningsfärg' })
+VisualsBoxesGroup:AddSlider('ESPBoxFillTrans', { Text = 'Fyllning Genomskinlighet %', Default = 50, Min = 0, Max = 100, Rounding = 0 })
+VisualsBoxesGroup:AddLabel('Outline (Kantlinje) Färg'):AddColorPicker('ESPOutlineColor', { Default = Color3.fromRGB(0, 0, 0), Title = 'Outline Färg' })
+VisualsBoxesGroup:AddSlider('ESPOutlineTrans', { Text = 'Outline Genomskinlighet %', Default = 0, Min = 0, Max = 100, Rounding = 0 })
+
+VisualsBarsGroup:AddToggle('ESPHealthBar', { Text = 'Aktivera Hälsobar (Healthbar)', Default = false })
+VisualsBarsGroup:AddDropdown('ESPHealthColorMode', { Values = { 'Dynamisk (Grön till Röd)', 'Statisk Färg' }, Default = 1, Multi = false, Text = 'Hälsobar Färg-läge' })
+VisualsBarsGroup:AddLabel('Statisk Hälsobar Färg'):AddColorPicker('ESPHealthStaticColor', { Default = Color3.fromRGB(0, 255, 0), Title = 'Hälsobar Färg' })
+VisualsBarsGroup:AddToggle('ESPNames', { Text = 'Visa Spelarnamn', Default = false })
+VisualsBarsGroup:AddLabel('Namnfärg'):AddColorPicker('ESPNameColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Namnfärg' })
+VisualsBarsGroup:AddToggle('ESPDistanceText', { Text = 'Visa Avstånd i Text', Default = false })
+VisualsBarsGroup:AddToggle('ESPWeapon', { Text = 'Visa Vapen-info (Aktivt Vapen)', Default = false })
+VisualsBarsGroup:AddLabel('Vapentext Färg'):AddColorPicker('ESPWeaponColor', { Default = Color3.fromRGB(200, 200, 200), Title = 'Vapen Färg' })
+
+VisualsExtrasGroup:AddToggle('ESPSkeleton', { Text = 'Aktivera Skelett-ESP (Skeleton)', Default = false })
+VisualsExtrasGroup:AddLabel('Skelett Färg'):AddColorPicker('ESPSkeletonColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Skelett Färg' })
+VisualsExtrasGroup:AddToggle('ESPHeadDot', { Text = 'Visa Prick på Huvud (Head Dot)', Default = false })
+VisualsExtrasGroup:AddLabel('Head Dot Färg'):AddColorPicker('ESPHeadDotColor', { Default = Color3.fromRGB(255, 0, 0), Title = 'Head Dot Färg' })
+VisualsExtrasGroup:AddToggle('ESPTracers', { Text = 'Aktivera Siktlinjer (Tracers)', Default = false })
+VisualsExtrasGroup:AddDropdown('ESPTracerOrigin', { Values = { 'Skärmens Botten', 'Muspekare', 'Skärmens Mitt' }, Default = 1, Multi = false, Text = 'Tracer Startpunkt' })
+VisualsExtrasGroup:AddLabel('Tracer Färg'):AddColorPicker('ESPTracerColor', { Default = Color3.fromRGB(255, 255, 255), Title = 'Tracer Färg' })
 
 SkinchangerGroup:AddToggle('SkinChangerToggle', { Text = 'Aktivera Vapen Skin Changer', Default = false })
 SkinchangerGroup:AddDropdown('SkinMaterialDropdown', { Values = { 'Neon', 'Glass', 'SmoothPlastic', 'Metal', 'Wood', 'ForceField', 'CorrodedMetal' }, Default = 1, Multi = false, Text = 'Vapen Material' })
@@ -951,7 +1170,7 @@ OrbitTeleportGroup:AddDropdown('OrbitMode', { Values = { 'Standard Cirkel', 'Ell
 OrbitTeleportGroup:AddToggle('OrbitLookAtTarget', { Text = 'Fixera Kamera/Blick mot Målet', Default = true })
 OrbitTeleportGroup:AddSlider('OrbitTpRadius', { Text = 'Orbit Radie / Avstånd', Default = 10, Min = 1, Max = 100, Rounding = 0 })
 OrbitTeleportGroup:AddSlider('OrbitEllipticX', { Text = 'Ellips X-Sträckning (Bredd)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
-OrbitEllipticZ = OrbitTeleportGroup:AddSlider('OrbitEllipticZ', { Text = 'Ellips Z-Sträckning (Djup)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
+OrbitTeleportGroup:AddSlider('OrbitEllipticZ', { Text = 'Ellips Z-Sträckning (Djup)', Default = 1, Min = 0.2, Max = 4, Rounding = 1 })
 OrbitTeleportGroup:AddSlider('OrbitTpHeight', { Text = 'Orbit Höjd (Offset)', Default = 0, Min = -30, Max = 50, Rounding = 0 })
 OrbitTeleportGroup:AddSlider('OrbitSpeed', { Text = 'Orbit Hastighet (Varv/s)', Default = 90, Min = 10, Max = 500, Rounding = 0 })
 OrbitTeleportGroup:AddButton('Uppdatera spelarlista', function()
@@ -963,7 +1182,7 @@ VoidSpamGroup:AddToggle('VoidSpamAnchor', { Text = 'Lås Centrumposition (Boosta
 VoidSpamGroup:AddDropdown('VoidSpamMode', { Values = { 'Full 3D Chaos (Explosiv)', 'Sfärisk / Kulan', 'Endast Höjd (Y-Axis Glitch)', 'Horisontell Hyper-Jitter', 'Mikro-Darrning (Stealth Shake)', 'Cylindrisk Pisk-snurr' }, Default = 1, Multi = false, Text = 'Voidspam / Chaos Läge' })
 VoidSpamGroup:AddSlider('VoidSpamSpeed', { Text = 'Spam-Frekvens (Tills/Sek)', Default = 35, Min = 5, Max = 120, Rounding = 0 })
 VoidSpamGroup:AddSlider('VoidSpamX', { Text = 'X-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
-VoidSpeedY = VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
+VoidSpamGroup:AddSlider('VoidSpamY', { Text = 'Y-Axel (Höjd) Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
 VoidSpamGroup:AddSlider('VoidSpamZ', { Text = 'Z-Axel Spridning', Default = 20, Min = 1, Max = 150, Rounding = 0 })
 
 MiscGroup:AddToggle('HitSoundToggle', { Text = 'Aktivera Hit Sound', Default = true })
