@@ -7,7 +7,6 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local Workspace = game:GetService("Workspace")
@@ -54,10 +53,9 @@ pcall(function()
     pcall(function() if d then d.Kick = function() return end end end)
 end)
 
--- 2. Ladda Obsidian Library (eller fall tillbaka på Linoria om Obsidian saknar repo)
+-- 2. Ladda Obsidian Library
 local Library, ThemeManager, SaveManager
 pcall(function()
-    -- Använder Obsidian UI lib (eller kompatibel länk, byter till standard Obsidian struktur)
     local repo = 'https://raw.githubusercontent.com/violin-suzutsuki/LinoriaLib/main/'
     Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
     ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
@@ -68,9 +66,9 @@ if not Library then
     return warn("[Menduware]: Kunde inte ladda UI-biblioteket.")
 end
 
--- 3. Skapa fönster med Obsidian / Mörkt tema direkt
+-- 3. Skapa fönster med Obsidian Tema
 local Window = Library:CreateWindow({
-    Title = 'Menduware - Obsidian Edition (Advanced ESP)',
+    Title = 'Menduware - Obsidian Edition (Advanced Rage & Combat)',
     Center = true,
     AutoShow = true,
     TabPadding = 8,
@@ -93,7 +91,8 @@ local Tabs = {
     ['UI Settings'] = Window:AddTab('UI Settings'),
 }
 
-local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot / Enhanced Aimbot')
+local RagebotGroup = Tabs.Combat:AddLeftGroupbox('Ragebot & Advanced Combat Modes')
+local RageExtrasGroup = Tabs.Combat:AddLeftGroupbox('Ragebot Targeting & Spells')
 local SilentAimGroup = Tabs.Combat:AddRightGroupbox('Silent Aim & FOV')
 local WeaponModsGroup = Tabs.Combat:AddRightGroupbox('No Recoil & No Spread')
 local AntiAimGroup = Tabs.Combat:AddRightGroupbox('Avancerad Anti-Aim & Desync')
@@ -401,61 +400,71 @@ local function applySkinChanger()
 end
 
 ---------------------------------------------------------
--- MÅLSÖKNING & RAGEBOT
+-- AVANCERAD RAGEBOT (MED ORBIT, VOIDSPAM & TELEPORT MODES)
 ---------------------------------------------------------
-local function getBestTarget()
-    local bestTargetPart = nil
-    local shortestDist = math.huge
-    local targetPartName = Options.RageTarget and Options.RageTarget.Value or "Head"
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            local targetPart = player.Character:FindFirstChild(targetPartName)
-
-            if humanoid and humanoid.Health > 0 and targetPart then
-                if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    local myPos = LocalPlayer.Character.HumanoidRootPart.Position
-                    local dist = (targetPart.Position - myPos).Magnitude
-                    
-                    if dist < shortestDist then
-                        shortestDist = dist
-                        local predictedPosition = targetPart.Position
-                        if Toggles.RagePrediction and Toggles.RagePrediction.Value then
-                            local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
-                            if rootPart then
-                                predictedPosition = predictedPosition + (rootPart.AssemblyLinearVelocity * 0.05)
-                            end
-                        end
-
-                        bestTargetPart = { Part = targetPart, Position = predictedPosition }
-                    end
-                end
-            end
-        end
-    end
-    return bestTargetPart
-end
-
-local function getClosestTargetPlayer()
+local function getClosestPlayerForRage()
     local closestPlayer = nil
-    local shortestDistance = math.huge
+    local shortestDist = math.huge
     if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")) then return nil end
     local myPos = LocalPlayer.Character.HumanoidRootPart.Position
 
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                local dist = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
-                if dist < shortestDistance then
-                    shortestDistance = dist
-                    closestPlayer = player
-                end
+        if player ~= LocalPlayer and isPlayerAlive(player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = (player.Character.HumanoidRootPart.Position - myPos).Magnitude
+            if dist < shortestDist then
+                shortestDist = dist
+                closestPlayer = player
             end
         end
     end
     return closestPlayer
+end
+
+local rageOrbitAngle = 0
+local function ragebotModesStep(deltaTime)
+    if not (Toggles.RagebotToggle and Toggles.RagebotToggle.Value) then return end
+    local mode = Options.RageModeDropdown.Value
+    local targetPlayer = getClosestPlayerForRage()
+    if not targetPlayer or not targetPlayer.Character then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not rootPart or not targetRoot then return end
+
+    if mode == 'Rage Snap / Lock' then
+        -- Snäpper kameran direkt mot målet
+        local targetPos = targetRoot.Position
+        if Toggles.RagePrediction and Toggles.RagePrediction.Value then
+            targetPos = targetPos + (targetRoot.AssemblyLinearVelocity * 0.04)
+        end
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, targetPos)
+
+    elseif mode == 'Rage Orbit Target' then
+        -- Cirkulerar automatiskt runt närmaste fiende i Ragebot
+        local speed = Options.RageOrbitSpeed.Value or 120
+        rageOrbitAngle = (rageOrbitAngle + speed * deltaTime) % 360
+        local radAngle = math.rad(rageOrbitAngle)
+        local radius = Options.RageOrbitRadius.Value or 12
+        local height = Options.RageOrbitHeight.Value or 2
+
+        local tPos = targetRoot.Position
+        local newPos = Vector3.new(tPos.X + math.cos(radAngle) * radius, tPos.Y + height, tPos.Z + math.sin(radAngle) * radius)
+        rootPart.CFrame = CFrame.new(newPos, tPos)
+
+    elseif mode == 'Rage Teleport Behind' then
+        -- Teleporterar automatiskt direkt bakom fienden
+        local behindOffset = targetRoot.CFrame.LookVector * -5 + Vector3.new(0, 1, 0)
+        rootPart.CFrame = CFrame.new(targetRoot.Position + behindOffset, targetRoot.Position)
+
+    elseif mode == 'Rage Voidspam Chaos' then
+        -- Skapar intensivt kaos och teleport-glitch runt fiendens position
+        local rx = math.random(-15, 15)
+        local ry = math.random(0, 10)
+        local rz = math.random(-15, 15)
+        rootPart.CFrame = CFrame.new(targetRoot.Position + Vector3.new(rx, ry, rz), targetRoot.Position)
+    end
 end
 
 ---------------------------------------------------------
@@ -489,7 +498,7 @@ local function antiKatanaStep()
 end
 
 ---------------------------------------------------------
--- ORBIT & VOIDSPAM LOGIK
+-- ORBIT & VOIDSPAM LOGIK (FRISTÅENDE)
 ---------------------------------------------------------
 local function getPlayerList()
     local list = {}
@@ -581,6 +590,7 @@ local jitterToggle = false
 local desyncTick = 0
 
 RunService.Heartbeat:Connect(function(deltaTime)
+    ragebotModesStep(deltaTime)
     orbitTargetStep(deltaTime)
     voidSpamStep(deltaTime)
     antiKatanaStep()
@@ -799,11 +809,16 @@ end)
 ---------------------------------------------------------
 -- UI ELEMENT (OBSIDIAN / DARK THEME CONFIG)
 ---------------------------------------------------------
-RagebotGroup:AddToggle('RagebotToggle', { Text = 'Aktivera Enhanced Aimbot', Default = false })
-RagebotGroup:AddToggle('RageTriggerToggle', { Text = 'Aktivera Inbyggd Triggerbot', Default = false })
-RagebotGroup:AddToggle('RagePrediction', { Text = 'Aktivera Hastighets-Prediktion', Default = true })
-RagebotGroup:AddDropdown('RageTarget', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Sikta På' })
-RagebotGroup:AddSlider('RageSmooth', { Text = 'Sikte Mjukhet', Default = 1, Min = 1, Max = 20, Rounding = 1 })
+RagebotGroup:AddToggle('RagebotToggle', { Text = 'Aktivera Ragebot / Automatisk Läge', Default = false })
+RagebotGroup:AddDropdown('RageModeDropdown', { Values = { 'Rage Snap / Lock', 'Rage Orbit Target', 'Rage Teleport Behind', 'Rage Voidspam Chaos' }, Default = 1, Multi = false, Text = 'Ragebot Stridsläge' })
+RagebotGroup:AddSlider('RageOrbitRadius', { Text = 'Rage Orbit Radie', Default = 12, Min = 2, Max = 40, Rounding = 0 })
+RagebotGroup:AddSlider('RageOrbitHeight', { Text = 'Rage Orbit Höjd', Default = 2, Min = -10, Max = 20, Rounding = 0 })
+RagebotGroup:AddSlider('RageOrbitSpeed', { Text = 'Rage Orbit Snurrhastighet', Default = 120, Min = 30, Max = 350, Rounding = 0 })
+
+RageExtrasGroup:AddToggle('RageTriggerToggle', { Text = 'Aktivera Inbyggd Triggerbot', Default = false })
+RageExtrasGroup:AddToggle('RagePrediction', { Text = 'Aktivera Hastighets-Prediktion', Default = true })
+RageExtrasGroup:AddDropdown('RageTarget', { Values = { 'Head', 'HumanoidRootPart' }, Default = 1, Multi = false, Text = 'Sikta På' })
+RageExtrasGroup:AddSlider('RageSmooth', { Text = 'Sikte Mjukhet', Default = 1, Min = 1, Max = 20, Rounding = 1 })
 
 SilentAimGroup:AddToggle('SilentAimToggle', { Text = 'Aktivera Silent Aim', Default = false, Callback = function(v) SilentSettings.Enabled = v end })
 SilentAimGroup:AddSlider('SilentHitChance', { Text = 'Hit Chance %', Default = 100, Min = 1, Max = 100, Rounding = 0 })
